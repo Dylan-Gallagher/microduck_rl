@@ -25,7 +25,7 @@ NUM_STEPS_PER_ENV = 24
 TURN_IN_PLACE_FRACTION = 0.15
 
 # Symmetry
-ENABLE_SYMMETRY = False
+ENABLE_SYMMETRY = True
 
 # Domain randomization toggles
 ENABLE_COM_RANDOMIZATION = True
@@ -342,7 +342,7 @@ def make_microduck_velocity_env_cfg(
     cfg.rewards["track_linear_velocity"].weight = 2.0
     cfg.rewards["track_linear_velocity"].params["std"] = math.sqrt(0.1)
     cfg.rewards["track_angular_velocity"].weight = 2.0
-    cfg.rewards["track_angular_velocity"].params["std"] = math.sqrt(0.5)
+    cfg.rewards["track_angular_velocity"].params["std"] = math.sqrt(0.15)  # tightened from 0.5: yaw drift at zero turn cmd must have gradient
 
     # Action smoothness: stage-0 value; the action_rate_weight curriculum below
     # ramps it -0.1 → -1.0 by iter 1500.
