@@ -25,7 +25,7 @@ NUM_STEPS_PER_ENV = 24
 TURN_IN_PLACE_FRACTION = 0.15
 
 # Symmetry
-ENABLE_SYMMETRY = True
+ENABLE_SYMMETRY = False
 
 # Domain randomization toggles
 ENABLE_COM_RANDOMIZATION = True
@@ -342,7 +342,17 @@ def make_microduck_velocity_env_cfg(
     cfg.rewards["track_linear_velocity"].weight = 2.0
     cfg.rewards["track_linear_velocity"].params["std"] = math.sqrt(0.1)
     cfg.rewards["track_angular_velocity"].weight = 2.0
-    cfg.rewards["track_angular_velocity"].params["std"] = math.sqrt(0.15)  # tightened from 0.5: yaw drift at zero turn cmd must have gradient
+    cfg.rewards["track_angular_velocity"].params["std"] = math.sqrt(0.5)
+
+    # Straight-line drift: DC yaw-rate bias penalty (see mdp.yaw_rate_bias_penalty).
+    # Self-negating function (returns <= 0) -> POSITIVE weight per convention.
+    # Mass check: a 0.1 rad/s steady bias costs 0.05/step at weight 0.5, vs
+    # air_time ~1.05 — enough to matter, not enough to freeze the gait.
+    cfg.rewards["yaw_rate_bias"] = RewardTermCfg(
+        func=microduck_mdp.yaw_rate_bias_penalty,
+        params={"command_name": "twist", "tau_s": 1.0},
+        weight=0.5,
+    )
 
     # Action smoothness: stage-0 value; the action_rate_weight curriculum below
     # ramps it -0.1 → -1.0 by iter 1500.

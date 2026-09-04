@@ -5317,6 +5317,44 @@ def head_pose_bias_penalty(
     return out
 
 
+def yaw_rate_bias_penalty(
+    env: ManagerBasedRlEnv,
+    command_name: str = "twist",
+    tau_s: float = 1.0,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+    """Penalize the time-averaged (DC) yaw-rate error: -|EMA(wz_cmd - wz)|.
+
+    Companion to ``track_angular_velocity``, which scores the INSTANTANEOUS
+    error with a loose Gaussian. Straight-line drift is a DC bias: the duck
+    commanded wz=0 that steadily curves. Stepping unavoidably oscillates wz
+    every footfall, so tightening the instantaneous Gaussian is a permanent
+    tax on walking (velocity run 2026-09-04: track_angular_velocity plateaued
+    at 0.18/2.0 under std=sqrt(0.15) and the gait stiffened). Averaging the
+    error over ``tau_s`` lets the oscillation cancel and prices only the
+    bias — same shape as head_pose_bias_penalty, for yaw rate.
+
+    Measures root_link_ang_vel_b[:,2] against command[:,2], the exact view
+    track_angular_velocity scores.
+
+    L1 (not Gaussian) on purpose: constant gradient at large bias, where a
+    Gaussian would be flat and dead.
+    """
+    asset: Entity = env.scene[asset_cfg.name]
+    cmd = env.command_manager.get_command(command_name)  # (N, 3)
+    err = cmd[:, 2] - asset.data.root_link_ang_vel_b[:, 2]
+
+    if not hasattr(env, "_yaw_bias_ema"):
+        env._yaw_bias_ema = torch.zeros_like(err)
+    # Freshly reset envs: drop the previous episode's accumulated bias.
+    fresh = env.episode_length_buf <= 1
+    env._yaw_bias_ema[fresh] = 0.0
+
+    alpha = min(1.0, float(env.step_dt) / max(tau_s, 1e-6))
+    env._yaw_bias_ema = (1.0 - alpha) * env._yaw_bias_ema + alpha * err
+    return -env._yaw_bias_ema.abs()
+
+
 def body_pose_tracking_6d(
     env: ManagerBasedRlEnv,
     command_name: str = "body_pose",
